@@ -4,6 +4,7 @@ interface
 
 type
   ICliente = interface
+  ['{C4E8A1D2-6B37-4F0A-9E15-2D8A7C41B6F0}']
     function GetCodigo: Integer;
     function GetNome: string;
     function GetCEP: string;
@@ -22,7 +23,9 @@ type
     function SetBairro(const AValue: string): ICliente;
     function SetCidade(const AValue: string): ICliente;
     function SetUF(const AValue: string): ICliente;
-    function SetCodigoIBGE(const AValue: string): ICliente;
+    function SetCodigoIBGE(const AValue: string): ICliente;
+
+    procedure Validar;
   end;
 
 implementation

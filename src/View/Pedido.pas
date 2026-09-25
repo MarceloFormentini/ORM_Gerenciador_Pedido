@@ -6,9 +6,11 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls,
   System.ImageList, Vcl.ImgList, Vcl.Mask, Vcl.DBCtrls,
-  controller.uIController, Data.DB, model.validacao.uIValidadorCampos,
+  controller.uIController, controller.pedido.uIPedidoController, Data.DB, model.validacao.uValidacao,
   Vcl.Grids, Vcl.DBGrids, Datasnap.DBClient,
-  model.totalizador.uITotalizadorValor, utils.uEnum;
+  model.totalizador.uITotalizadorValor, utils.uEnum,
+  model.pedido.uIPedido, model.cliente.uICliente, model.produto.uIProduto,
+  model.pedidoItens.uIItensPedido;
 
 type
   TFPedido = class(TForm)
@@ -32,8 +34,6 @@ type
     Label4: TLabel;
     DataEmissao: TDateTimePicker;
     RadioGroup1: TRadioGroup;
-    CheckEntrada: TCheckBox;
-    CheckSaida: TCheckBox;
     EditNumeroPedido: TEdit;
     ImageList: TImageList;
     EditReferencia: TEdit;
@@ -74,8 +74,6 @@ type
     procedure btnVoltarClick(Sender: TObject);
     procedure btnSalvarClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure CheckEntradaClick(Sender: TObject);
-    procedure CheckSaidaClick(Sender: TObject);
     procedure EditNumeroPedidoKeyPress(Sender: TObject; var Key: Char);
     procedure btnPesquisaClick(Sender: TObject);
     procedure btnNovoClick(Sender: TObject);
@@ -94,27 +92,29 @@ type
     procedure btnExcluirClick(Sender: TObject);
   private
     FController: IController;
-    FValidadorCampos: IValidadorCampos;
+    FPedidos: IPedidoController;
     FCodigoPedido: Integer;
-    FTotalPedido: Double;
     FTotalizadorValor: ITotalizadorValor;
+    FItensCarregados: Boolean;
 
     procedure LimparCampos;
+    procedure ReiniciarItens;
 
-    procedure CarregarDados(ADataSet: TDataSet);
-    procedure CarregarDadosCliente(ADataSet: TDataSet);
+    procedure CarregarDados(APedido: IPedido);
+    procedure CarregarDadosCliente(ACliente: ICliente);
     procedure PesquisarCliente(ACliente: Integer);
 
-    procedure CarregarDadosProduto(ADataSet: TDataSet);
+    procedure CarregarDadosProduto(AProduto: IProduto);
     procedure PesquisarProduto(AProduto: Integer);
 
     procedure AbrirPesquisa(ATipoPesquisa: tTipoPesquisa);
     procedure PesquisaItensPedido;
-    procedure CarregaItensPedido(ADataSet: TDataSet);
-
-    function ValidarCamposItens: Boolean;
+    procedure CarregaItensPedido(const AItens: TArray<TItemPedidoConsulta>);
 
     procedure CalcularTotalItem;
+    procedure MostrarValidacao(E: EValidacao);
+    function MontarCabecalho: IPedido;
+    function MontarPedido: IPedido;
   end;
 
 var
@@ -123,8 +123,7 @@ var
 implementation
 
 uses
-  controller.uController, Pesquisa, model.validacao.uValidadorCampos,
-  model.totalizador.uTotalizadorValor;
+  controller.uController, Pesquisa, model.totalizador.uTotalizadorValor;
 
 {$R *.dfm}
 
@@ -134,9 +133,24 @@ begin
 end;
 
 procedure TFPedido.btnInserirItemClick(Sender: TObject);
+var
+  lItem: IItensPedido;
 begin
-  if not ValidarCamposItens then
-    Exit;
+  lItem := FPedidos.NovoItem
+    .SetCodigoProduto(ClientDataSetCODIGO_PRODUTO.AsInteger)
+    .SetQuantidade(ClientDataSetQUANTIDADE.AsFloat)
+    .SetValorUnitario(ClientDataSetVALOR_UNITARIO.AsFloat);
+  try
+    lItem.Validar;
+  except
+    on E: EValidacao do
+    begin
+      MostrarValidacao(E);
+      Exit;
+    end;
+  end;
+
+  ClientDataSetTOTAL_ITEM.AsFloat := lItem.GetValorTotal;
   ClientDataSet.Post;
   btnInserirItem.Enabled := False;
   btnCancelarItem.Enabled := False;
@@ -177,10 +191,10 @@ var
   FPesquisa : TFPesquisa;
 begin
   FPesquisa := TFPesquisa.Create(Self);
-  FPesquisa.TipoPesquisa := tpPedido;
+  FPesquisa.TipoPesquisa := tpProduto;
   try
-    if FPesquisa.ShowModal = mrOk then
-      CarregarDadosProduto(FPesquisa.GetDataSet);
+      if FPesquisa.ShowModal = mrOk then
+      CarregarDadosProduto(FPesquisa.ProdutoSelecionado);
   finally
     FPesquisa.Free;
   end;
@@ -195,86 +209,97 @@ begin
   EditTotalPedido.Text := FTotalizadorValor.CalcularTotal;
 end;
 
-procedure TFPedido.btnSalvarClick(Sender: TObject);
+function TFPedido.MontarCabecalho: IPedido;
 var
-  tipoPedido: String;
-  lDataSource: TDataSource;
+  lTipo: string;
 begin
-  if ClientDataSet.IsEmpty then
-  begin
-    ShowMessage('Informe os itens do pedido para poder salvar.');
-    Exit;
-  end;
-  if MessageDlg('Confirma o pedido?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
-    Exit;
+  if RadioGroup1.ItemIndex = 0 then
+    lTipo := 'E'
+  else
+    lTipo := 'S';
 
-  tipoPedido := 'S';
-  if CheckEntrada.Checked then
-    tipoPedido := 'E';
+  Result := FPedidos.Novo
+    .SetCodigo(FCodigoPedido)
+    .SetReferencia(EditReferencia.Text)
+    .SetNumeroPedido(Trim(EditNumeroPedido.Text))
+    .SetDataEmissao(DataEmissao.DateTime)
+    .SetCodigoCliente(StrToIntDef(EditCodigoCliente.Text, 0))
+    .SetTipoPedido(lTipo);
+end;
 
+function TFPedido.MontarPedido: IPedido;
+begin
+  Result := MontarCabecalho;
+  ClientDataSet.DisableControls;
   try
-    var lPedido := FController.Entity.Pedido
-      .SetCodigo(FCodigoPedido)
-      .SetReferencia(EditReferencia.Text)
-      .SetNumeroPedido(StrToInt(EditNumeroPedido.Text))
-      .SetDataEmissao(DataEmissao.DateTime)
-      .SetCodigoCliente(StrToInt(EditCodigoCliente.Text))
-      .SetTipoPedido(tipoPedido)
-      .SetValorTotal(StrToFloat(EditTotalPedido.Text));
-
-    if FCodigoPedido > 0 then
-      FController.Dao(lPedido).Atualizar
-    else
+    ClientDataSet.First;
+    while not ClientDataSet.Eof do
     begin
-      FController.Dao(lPedido).Inserir;
-
-      lDataSource := TDataSource.Create(nil);
-      try
-        FController.Dao(
-          FController.Entity.Pedido.SetNumeroPedido(
-            StrToInt(EditNumeroPedido.Text)
-          )
-        ).ListarPor('NUMERO_PEDIDO').DataSource(lDataSource);
-
-        FCodigoPedido := lDataSource.DataSet.FieldByName('CODIGO').AsInteger;
-      finally
-        lDataSource.Free;
-      end;
-    end;
-
-    try
-      ClientDataSet.DisableControls;
-      ClientDataSet.First;
-      while not ClientDataSet.Eof do
-      begin
-        var lItensPedido := FController.Entity.PedidoItens
+      Result.AdicionarItem(
+        FPedidos.NovoItem
           .SetCodigo(ClientDataSetCODIGO.AsInteger)
-          .SetCodigoPedido(FCodigoPedido)
           .SetCodigoProduto(ClientDataSetCODIGO_PRODUTO.AsInteger)
           .SetQuantidade(ClientDataSetQUANTIDADE.AsFloat)
           .SetValorUnitario(ClientDataSetVALOR_UNITARIO.AsFloat)
-          .SetValorTotal(ClientDataSetTOTAL_ITEM.AsFloat);
-
-        if ClientDataSetCODIGO.AsInteger > 0 then
-          FController.Dao(lItensPedido).Atualizar
-        else
-          FController.Dao(lItensPedido).Inserir;
-
-        ClientDataSet.Next;
-      end;
-
-    finally
-      ClientDataSet.EnableControls;
+          .SetValorTotal(ClientDataSetTOTAL_ITEM.AsFloat)
+      );
+      ClientDataSet.Next;
     end;
+  finally
+    ClientDataSet.EnableControls;
+  end;
+end;
 
-    ShowMessage('Pedido gravado com sucesso.');
-    btnVoltar.Click;
-    btnNovo.Click;
+procedure TFPedido.MostrarValidacao(E: EValidacao);
+begin
+  ShowMessage(E.Message);
+  if E.Campo = 'NUMERO_PEDIDO' then
+    EditNumeroPedido.SetFocus
+  else if E.Campo = 'REFERENCIA' then
+    EditReferencia.SetFocus
+  else if E.Campo = 'DATA_EMISSAO' then
+    DataEmissao.SetFocus
+  else if E.Campo = 'CODIGO_CLIENTE' then
+    EditCodigoCliente.SetFocus
+  else if E.Campo = 'CODIGO_PRODUTO' then
+    CODIGO_PRODUTO.SetFocus
+  else if E.Campo = 'QUANTIDADE' then
+    QUANTIDADE.SetFocus
+  else if E.Campo = 'VALOR_UNITARIO' then
+    VALOR_UNITARIO.SetFocus;
+end;
+
+procedure TFPedido.btnSalvarClick(Sender: TObject);
+var
+  lPedido: IPedido;
+begin
+  lPedido := MontarPedido;
+  try
+    lPedido.Validar;
   except
-    on E:Exception do
-      ShowMessage('Erro ao salvar pedido. ' + E.Message);
+    on E: EValidacao do
+    begin
+      MostrarValidacao(E);
+      Exit;
+    end;
   end;
 
+  if MessageDlg('Confirma o pedido?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
+    Exit;
+
+  try
+    FPedidos.Salvar(lPedido);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Erro ao salvar pedido. ' + E.Message);
+      Exit;
+    end;
+  end;
+
+  ShowMessage('Pedido gravado com sucesso.');
+  btnVoltar.Click;
+  btnNovo.Click;
 end;
 
 procedure TFPedido.btnVoltarClick(Sender: TObject);
@@ -283,173 +308,106 @@ begin
 end;
 
 procedure TFPedido.PesquisaItensPedido;
-var
-  lDataSource: TDataSource;
 begin
   if FCodigoPedido <= 0 then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.PedidoItens.SetCodigoPedido(
-        FCodigoPedido
-      )
-    ).ListarPor('CODIGO_PEDIDO').DataSource(lDataSource);
-
-    CarregaItensPedido(lDataSource.DataSet);
-
-  finally
-    lDataSource.Free;
-  end;
+  ReiniciarItens;
+  CarregaItensPedido(FPedidos.Itens(FCodigoPedido));
 end;
 
 procedure TFPedido.PesquisarCliente(ACliente: Integer);
-var
-  lDataSource: TDataSource;
 begin
-
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Cliente.SetCodigo(
-        ACliente
-      )
-    ).ListarPorId.DataSource(lDataSource);
-
-    CarregarDadosCliente(lDataSource.DataSet);
-
-  finally
-    lDataSource.Free;
-  end;
+  CarregarDadosCliente(FPedidos.BuscarCliente(ACliente));
 end;
 
 procedure TFPedido.PesquisarProduto(AProduto: Integer);
-var
-  lDataSource: TDataSource;
 begin
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Produto.SetCodigo(
-        AProduto
-      )
-    ).ListarPorId.DataSource(lDataSource);
-
-    CarregarDadosProduto(lDataSource.DataSet);
-
-  finally
-    lDataSource.Free;
-  end;
-end;
-
-function TFPedido.ValidarCamposItens: Boolean;
-var
-  i: Integer;
-  Field: TField;
-begin
-  Result := True;
-  for i := 0 to ClientDataSet.FieldCount - 1 do
-    begin
-      Field := ClientDataSet.Fields[i];
-      if Field.Required and Field.IsNull then
-      begin
-        ShowMessage('O campo ' + Field.DisplayLabel + ' deve ser informado.');
-        Field.FocusControl;
-        Result := False;
-        Break;
-      end;
-    end;
-
+  CarregarDadosProduto(FPedidos.BuscarProduto(AProduto));
 end;
 
 procedure TFPedido.CalcularTotalItem;
 begin
-  ClientDataSetTOTAL_ITEM.AsFloat := ClientDataSetQUANTIDADE.AsFloat * ClientDataSetVALOR_UNITARIO.AsFloat;
+  ClientDataSetTOTAL_ITEM.AsFloat := FPedidos.NovoItem
+    .SetQuantidade(ClientDataSetQUANTIDADE.AsFloat)
+    .SetValorUnitario(ClientDataSetVALOR_UNITARIO.AsFloat)
+    .RecalcularTotal;
 end;
 
-procedure TFPedido.CarregaItensPedido(ADataSet: TDataSet);
+procedure TFPedido.CarregaItensPedido(const AItens: TArray<TItemPedidoConsulta>);
 var
-  i: Integer;
-  Field: TField;
+  lItem: TItemPedidoConsulta;
 begin
-  if ADataSet.IsEmpty then
+  if Length(AItens) = 0 then
   begin
     ClientDataSet.Append;
     Exit;
   end;
 
-  ADataSet.First;
-  while not ADataSet.Eof do
+  for lItem in AItens do
   begin
     ClientDataSet.Append;
-    for i := 0 to ADataSet.FieldCount - 1 do
-    begin
-      Field := ADataSet.Fields[i];
-      ClientDataSet.FieldByName(Field.FieldName).Value := Field.Value;
-    end;
-    PesquisarProduto(ClientDataSetCODIGO_PRODUTO.AsInteger);
+    ClientDataSetCODIGO.AsInteger := lItem.Codigo;
+    ClientDataSetCODIGO_PEDIDO.AsInteger := lItem.CodigoPedido;
+    ClientDataSetCODIGO_PRODUTO.AsInteger := lItem.CodigoProduto;
+    ClientDataSetQUANTIDADE.AsFloat := lItem.Quantidade;
+    ClientDataSetVALOR_UNITARIO.AsFloat := lItem.ValorUnitario;
+    ClientDataSetTOTAL_ITEM.AsFloat := lItem.ValorTotal;
+    ClientDataSetDESCRICAO.AsString := lItem.Descricao;
     ClientDataSet.Post;
-
-    ADataSet.Next;
   end;
   ClientDataSet.First;
-
 end;
 
-procedure TFPedido.CarregarDados(ADataSet: TDataSet);
+procedure TFPedido.CarregarDados(APedido: IPedido);
 var
-  tipoOperacao: String;
+  lNumeroDigitado: string;
 begin
-  FCodigoPedido := 0;
-  if ADataSet.IsEmpty then
+  lNumeroDigitado := Trim(EditNumeroPedido.Text);
+  LimparCampos;
+  EditNumeroPedido.Text := lNumeroDigitado;
+  btnExcluir.Enabled := False;
+
+  if not Assigned(APedido) or (APedido.GetCodigo <= 0) then
     Exit;
 
-  FCodigoPedido := ADataSet.FieldByName('CODIGO').AsInteger;
-  EditNumeroPedido.Text := ADataSet.FieldByName('NUMERO_PEDIDO').AsString;
-  EditReferencia.Text := ADataSet.FieldByName('REFERENCIA').AsString;
-  DataEmissao.DateTime := ADataSet.FieldByName('DATA_EMISSAO').AsDateTime;
-  tipoOperacao := ADataSet.FieldByName('TIPO_OPERACAO').AsString;
+  FCodigoPedido := APedido.GetCodigo;
+  EditNumeroPedido.Text := APedido.GetNumeroPedido;
+  EditReferencia.Text := APedido.GetReferencia;
+  DataEmissao.DateTime := APedido.GetDataEmissao;
 
-  CheckEntrada.Checked := tipoOperacao = 'E';
-  CheckSaida.Checked := tipoOperacao = 'S';
+  if APedido.GetTipoPedido = 'E' then
+    RadioGroup1.ItemIndex := 0
+  else
+    RadioGroup1.ItemIndex := 1;
 
-  PesquisarCliente(ADataSet.FieldByName('CODIGO_CLIENTE').AsInteger);
+  CarregarDadosCliente(FPedidos.ClienteRelacionado(APedido));
   btnExcluir.Enabled := True;
 end;
 
-procedure TFPedido.CarregarDadosCliente(ADataSet: TDataSet);
+procedure TFPedido.CarregarDadosCliente(ACliente: ICliente);
 begin
   EditCodigoCliente.Clear;
   EditNomeCliente.Clear;
 
-  if ADataSet.IsEmpty then
+  if not Assigned(ACliente) or (ACliente.GetCodigo <= 0) then
     Exit;
 
-  EditCodigoCliente.Text := ADataSet.FieldByName('CODIGO').AsString;
-  EditNomeCliente.Text := ADataSet.FieldByName('NOME').AsString;
+  EditCodigoCliente.Text := ACliente.GetCodigo.ToString;
+  EditNomeCliente.Text := ACliente.GetNome;
 end;
 
-procedure TFPedido.CarregarDadosProduto(ADataSet: TDataSet);
+procedure TFPedido.CarregarDadosProduto(AProduto: IProduto);
 begin
   ClientDataSetDESCRICAO.Clear;
   ClientDataSetCODIGO_PRODUTO.Clear;
 
-  if ADataSet.IsEmpty then
+  if not Assigned(AProduto) or (AProduto.GetCodigo <= 0) then
     Exit;
 
-  ClientDataSetDESCRICAO.AsString       := ADataSet.FieldByName('DESCRICAO').AsString;
-  ClientDataSetCODIGO_PRODUTO.AsInteger := ADataSet.FieldByName('CODIGO').AsInteger;
-end;
-
-procedure TFPedido.CheckEntradaClick(Sender: TObject);
-begin
-  CheckSaida.Checked := not CheckEntrada.Checked;
-end;
-
-procedure TFPedido.CheckSaidaClick(Sender: TObject);
-begin
-  CheckEntrada.Checked := not CheckSaida.Checked;
+  ClientDataSetDESCRICAO.AsString := AProduto.GetDescricao;
+  ClientDataSetCODIGO_PRODUTO.AsInteger := AProduto.GetCodigo;
+  ClientDataSetVALOR_UNITARIO.AsCurrency := AProduto.GetPrecoVenda;
 end;
 
 procedure TFPedido.ClientDataSetAfterEdit(DataSet: TDataSet);
@@ -471,17 +429,24 @@ begin
 end;
 
 procedure TFPedido.CODIGO_PRODUTOKeyPress(Sender: TObject; var Key: Char);
+var
+  lCodigo: Integer;
 begin
   if Key <> #13 then
     Exit;
 
-  PesquisarProduto(StrToInt(CODIGO_PRODUTO.Text));
-  Perform(Wm_NextDlgCtl,0,0);
+  Key := #0;
+  if not TryStrToInt(Trim(CODIGO_PRODUTO.Text), lCodigo) then
+  begin
+    ShowMessage('Informe um código de produto numérico.');
+    Exit;
+  end;
+
+  PesquisarProduto(lCodigo);
+  Perform(Wm_NextDlgCtl, 0, 0);
 end;
 
 procedure TFPedido.EditCodigoClienteKeyPress(Sender: TObject; var Key: Char);
-var
-  lDataSource: TDataSource;
 begin
   if Key <> #13 then
     Exit;
@@ -489,55 +454,28 @@ begin
   if EditCodigoCliente.Text = '' then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Cliente.SetCodigo(
-        StrToInt(EditCodigoCliente.Text)
-      )
-    ).ListarPorId.DataSource(lDataSource);
-
-    CarregarDadosCliente(lDataSource.DataSet);
-  finally
-    lDataSource.Free;
-  end;
+  PesquisarCliente(StrToInt(EditCodigoCliente.Text));
 end;
 
 procedure TFPedido.EditNumeroPedidoKeyPress(Sender: TObject; var Key: Char);
-var
-  lDataSource: TDataSource;
 begin
   if Key <> #13 then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Pedido.SetNumeroPedido(
-        StrToInt(EditNumeroPedido.Text)
-      )
-    ).ListarPor('NUMERO_PEDIDO').DataSource(lDataSource);
-
-    CarregarDados(lDataSource.DataSet);
-  finally
-    lDataSource.Free;
-  end;
+  CarregarDados(FPedidos.BuscarPorNumero(EditNumeroPedido.Text));
 end;
 
 procedure TFPedido.FormCreate(Sender: TObject);
 var
   i: Integer;
 begin
-  // oculta as abas do PageControl e seta a pagina inicial
   for i := 0 to PageControl.PageCount -1 do
     PageControl.Pages[i].TabVisible := False;
 
   PageControl.ActivePage := PageControl.Pages[0];
 
   FController := TController.New;
-
-  FValidadorCampos := TValidadorCampos.New(Self);
-
+  FPedidos := FController.Pedidos;
   FTotalizadorValor := TTotalizadorValor.New(ClientDataSet);
   LimparCampos;
   Shape.Width := PanelPedido.Width - 2;
@@ -549,6 +487,13 @@ begin
   btnExcluir.Enabled := False;
 end;
 
+procedure TFPedido.ReiniciarItens;
+begin
+  ClientDataSet.Close;
+  ClientDataSet.CreateDataSet;
+  ClientDataSet.Open;
+end;
+
 procedure TFPedido.LimparCampos;
 begin
   EditNumeroPedido.Clear;
@@ -556,12 +501,10 @@ begin
   DataEmissao.DateTime := Now();
   EditCodigoCliente.Clear;
   EditNomeCliente.Clear;
-  CheckEntrada.Checked := False;
-  CheckSaida.Checked := True;
+  RadioGroup1.ItemIndex := 1;
   FCodigoPedido := 0;
-  ClientDataSet.Close;
-  ClientDataSet.CreateDataSet;
-  ClientDataSet.Open;
+  FItensCarregados := False;
+  ReiniciarItens;
 end;
 
 procedure TFPedido.AbrirPesquisa(ATipoPesquisa: tTipoPesquisa);
@@ -575,9 +518,9 @@ begin
     begin
       case ATipoPesquisa of
         tpCliente:
-          CarregarDadosCliente(FPesquisa.GetDataSet);
+          CarregarDadosCliente(FPesquisa.ClienteSelecionado);
         tpPedido:
-          CarregarDados(FPesquisa.GetDataSet);
+          CarregarDados(FPesquisa.PedidoSelecionado);
       end;
     end;
   finally
@@ -587,11 +530,22 @@ end;
 
 procedure TFPedido.btnAvancarClick(Sender: TObject);
 begin
-  if EditNumeroPedido.Text = '' then
-    if not FValidadorCampos.ValidarCampos then
+  try
+    MontarCabecalho.ValidarCabecalho;
+  except
+    on E: EValidacao do
+    begin
+      MostrarValidacao(E);
       Exit;
+    end;
+  end;
 
-  PesquisaItensPedido;
+  if not FItensCarregados then
+  begin
+    PesquisaItensPedido;
+    FItensCarregados := True;
+  end;
+
   PageControl.SelectNextPage(True, False);
   if ClientDataSet.IsEmpty then
     btnNovoItem.Click
@@ -620,35 +574,17 @@ begin
     Exit;
 
   try
-    ClientDataSet.DisableControls;
-    try
-      ClientDataSet.First;
-      while not ClientDataSet.Eof do
-      begin
-        var lItensPedidos := FController.Entity
-            .PedidoItens
-            .SetCodigo(ClientDataSetCODIGO.AsInteger);
-
-        FController.Dao(lItensPedidos).Excluir;
-
-        ClientDataSet.Next;
-      end;
-
-      var lPedido := FController.Entity
-        .Pedido
-        .SetCodigo(FCodigoPedido);
-//        .SetNumeroPedido(StrToInt(EditNumeroPedido.Text));
-
-      FController.Dao(lPedido).Excluir;
-    except
-      on E:Exception do
-        ShowMessage('Erro ao excluir pedido. ' + E.Message);
+    FPedidos.Excluir(FCodigoPedido);
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Erro ao excluir pedido. ' + E.Message);
+      Exit;
     end;
-    btnVoltar.Click;
-    btnNovo.Click;
-  finally
-    ClientDataSet.EnableControls;
   end;
+
+  btnVoltar.Click;
+  btnNovo.Click;
 end;
 
 end.

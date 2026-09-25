@@ -61,5 +61,6 @@ out/
 # Delphi IDE project upgrade backup
 *_UpgradeBackup/
 
-# Exclui configuraÃ§Ãµes especÃ­ficas do usuÃ¡rio
+# Exclui configurações específicas do usuário
 *.user
+

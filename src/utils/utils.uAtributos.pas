@@ -27,7 +27,15 @@ type
   PK = class(TCustomAttribute)
   end;
 
-  FK = class(TCustomAttribute)
+  Identidade = class(TCustomAttribute)
+  end;
+
+  Relacionamento = class(TCustomAttribute)
+  private
+    FClasse: TClass;
+  public
+    constructor Create(AClasse: TClass);
+    property Classe: TClass read FClasse;
   end;
 
 implementation
@@ -45,6 +53,13 @@ constructor Tabela.Create(AName: String);
 begin
   FName := AName;
 
+end;
+
+{ Relacionamento }
+
+constructor Relacionamento.Create(AClasse: TClass);
+begin
+  FClasse := AClasse;
 end;
 
 end.

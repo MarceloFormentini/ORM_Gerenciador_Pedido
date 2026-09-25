@@ -10,7 +10,7 @@ type
   [Tabela('CLIENTE')]
   TCliente = class(TInterfacedObject, ICliente)
   private
-    [Campo('CODIGO'), PK]
+    [Campo('CODIGO'), PK, Identidade]
     FCodigo: Integer;
 
     [Campo('NOME')]
@@ -58,11 +58,16 @@ type
     function SetBairro(const AValue: string): ICliente;
     function SetCidade(const AValue: string): ICliente;
     function SetUF(const AValue: string): ICliente;
-    function SetCodigoIBGE(const AValue: string): ICliente;
+    function SetCodigoIBGE(const AValue: string): ICliente;
 
+    procedure Validar;
   end;
 
 implementation
+
+uses
+  System.SysUtils,
+  model.validacao.uValidacao;
 
 class function TCliente.New: ICliente;
 begin
@@ -166,6 +171,32 @@ function TCliente.SetUF(const AValue: string): ICliente;
 begin
   Result := Self;
   FUF := AValue;
+end;
+
+procedure TCliente.Validar;
+begin
+  FNome := Trim(FNome);
+  FCEP := Trim(FCEP);
+  FLogradouro := Trim(FLogradouro);
+  FBairro := Trim(FBairro);
+  FCidade := Trim(FCidade);
+  FUF := Trim(FUF);
+  FCodigoIBGE := Trim(FCodigoIBGE);
+
+  if FNome = '' then
+    raise EValidacao.Create('NOME', 'O campo "Nome" é obrigatório.');
+  if FCEP = '' then
+    raise EValidacao.Create('CEP', 'O campo "CEP" é obrigatório.');
+  if FLogradouro = '' then
+    raise EValidacao.Create('LOGRADOURO', 'O campo "Logradouro" é obrigatório.');
+  if FBairro = '' then
+    raise EValidacao.Create('BAIRRO', 'O campo "Bairro" é obrigatório.');
+  if FCidade = '' then
+    raise EValidacao.Create('CIDADE', 'O campo "Cidade" é obrigatório.');
+  if FUF = '' then
+    raise EValidacao.Create('UF', 'O campo "UF" é obrigatório.');
+  if FCodigoIBGE = '' then
+    raise EValidacao.Create('CODIGO_IBGE', 'O campo "IBGE" é obrigatório.');
 end;
 
 end.

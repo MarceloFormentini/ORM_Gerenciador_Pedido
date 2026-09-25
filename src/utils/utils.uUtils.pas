@@ -4,26 +4,26 @@ interface
 
 uses
   utils.uIUtils,
-  utils.uIQuery;
+  utils.uIMontadorSql;
 
 type
   TUtils = class(TInterfacedObject, IUtils)
   private
     FParent: IInterface;
-    FQuery: IQuery;
+    FMontadorSql: IMontadorSql;
 
   public
     constructor Create(Parent: IInterface);
     destructor Destroy; override;
     class function New(Parent: IInterface): IUtils;
-    function Query: IQuery;
+    function MontadorSql: IMontadorSql;
 
   end;
 
 implementation
 
 uses
-  utils.uQuery;
+  utils.uMontadorSql;
 
 constructor TUtils.Create(Parent: IInterface);
 begin
@@ -41,12 +41,12 @@ begin
   Result := Self.Create(Parent);
 end;
 
-function TUtils.Query: IQuery;
+function TUtils.MontadorSql: IMontadorSql;
 begin
-  if not Assigned(FQuery) then
-    FQuery := TQuery.New(FParent);
+  if not Assigned(FMontadorSql) then
+    FMontadorSql := TMontadorSql.New(FParent);
 
-  Result := FQuery;
+  Result := FMontadorSql;
 end;
 
 end.

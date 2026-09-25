@@ -4,7 +4,12 @@ interface
 
 uses
   controller.uIController,
+  controller.cliente.uIClienteController,
+  controller.produto.uIProdutoController,
+  controller.pedido.uIPedidoController,
   model.cliente.uICliente,
+  model.produto.uIProduto,
+  model.pedido.uIPedido,
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Data.DB,
   Vcl.Grids, Vcl.DBGrids, System.Generics.Collections, Datasnap.DBClient,
@@ -33,6 +38,12 @@ type
 
   private
     FController: IController;
+    FClientes: IClienteController;
+    FProdutos: IProdutoController;
+    FPedidos: IPedidoController;
+    FClientesLista: TArray<ICliente>;
+    FProdutosLista: TArray<IProduto>;
+    FPedidosLista: TArray<IPedido>;
     FDataSet: TClientDataSet;
 
     procedure PesquisaCliente;
@@ -44,10 +55,14 @@ type
     procedure ConfigurarGridCliente;
     procedure ConfigurarGridProduto;
     procedure ConfigurarGridPedido;
-    procedure CopiarDados(ADataSet: TDataSet);
+    procedure PreencherClientes(const AClientes: TArray<ICliente>);
+    procedure PreencherProdutos(const AProdutos: TArray<IProduto>);
+    procedure PreencherPedidos(const APedidos: TArray<IPedido>);
   public
     TipoPesquisa: tTipoPesquisa;
-    function GetDataSet: TDataSet;
+    function ClienteSelecionado: ICliente;
+    function ProdutoSelecionado: IProduto;
+    function PedidoSelecionado: IPedido;
   end;
 
 var
@@ -68,6 +83,9 @@ end;
 procedure TFPesquisa.FormCreate(Sender: TObject);
 begin
   FController := TController.New;
+  FClientes := FController.Clientes;
+  FProdutos := FController.Produtos;
+  FPedidos := FController.Pedidos;
   FDataSet := TClientDataSet.Create(nil);
 end;
 
@@ -101,9 +119,37 @@ begin
   GridPesquisa.SetFocus;
 end;
 
-function TFPesquisa.GetDataSet: TDataSet;
+function TFPesquisa.ClienteSelecionado: ICliente;
 begin
-  Result := FDataSet;
+  Result := nil;
+  if not Assigned(FDataSet) or FDataSet.IsEmpty then
+    Exit;
+  if (FDataSet.RecNo < 1) or (FDataSet.RecNo > Length(FClientesLista)) then
+    Exit;
+
+  Result := FClientesLista[FDataSet.RecNo - 1];
+end;
+
+function TFPesquisa.ProdutoSelecionado: IProduto;
+begin
+  Result := nil;
+  if not Assigned(FDataSet) or FDataSet.IsEmpty then
+    Exit;
+  if (FDataSet.RecNo < 1) or (FDataSet.RecNo > Length(FProdutosLista)) then
+    Exit;
+
+  Result := FProdutosLista[FDataSet.RecNo - 1];
+end;
+
+function TFPesquisa.PedidoSelecionado: IPedido;
+begin
+  Result := nil;
+  if not Assigned(FDataSet) or FDataSet.IsEmpty then
+    Exit;
+  if (FDataSet.RecNo < 1) or (FDataSet.RecNo > Length(FPedidosLista)) then
+    Exit;
+
+  Result := FPedidosLista[FDataSet.RecNo - 1];
 end;
 
 procedure TFPesquisa.GridPesquisaDblClick(Sender: TObject);
@@ -113,79 +159,44 @@ end;
 
 procedure TFPesquisa.PesquisaCliente;
 begin
-  var lCliente := FController.Dao(
-    FController.Entity.Cliente
-  ).Listar.DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
-
+  PreencherClientes(FClientes.Listar);
   ConfigurarGridCliente;
 end;
 
 procedure TFPesquisa.PesquisaClientePor;
 begin
-  var lCliente := FController.Dao(
-    FController.Entity.Cliente.SetNome(
-      EditPesquisa.Text
-    )
-  ).ListarPor('NOME').DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
+  PreencherClientes(FClientes.PesquisarPorNome(EditPesquisa.Text));
   ConfigurarGridCliente;
 end;
 
 procedure TFPesquisa.PesquisaPedido;
 begin
-  var lPedido := FController.Dao(
-    FController.Entity.Pedido
-  ).Listar.DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
-
+  PreencherPedidos(FPedidos.Listar);
   ConfigurarGridPedido;
 end;
 
 procedure TFPesquisa.PesquisaPedidoPor;
-var
-  pedido: Integer;
 begin
-  if not TryStrToInt(EditPesquisa.Text, pedido) then
+  if Trim(EditPesquisa.Text) = '' then
   begin
-    ShowMessage('Informe o numero do pedido. Digite um número inteiro');
+    ShowMessage('Informe o numero do pedido.');
     EditPesquisa.SetFocus;
     Exit;
   end;
 
-  var lCliente := FController.Dao(
-    FController.Entity.Pedido.SetNumeroPedido(
-      pedido
-    )
-  ).ListarPor('NUMERO_PEDIDO').DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
+  PreencherPedidos(FPedidos.PesquisarPorNumero(Trim(EditPesquisa.Text)));
   ConfigurarGridPedido;
 end;
 
 procedure TFPesquisa.PesquisaProduto;
 begin
-  FController.Dao(
-    FController.Entity.Produto
-  ).Listar.DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
-
+  PreencherProdutos(FProdutos.Listar);
   ConfigurarGridProduto;
 end;
 
 procedure TFPesquisa.PesquisaProdutoPor;
 begin
-  FController.Dao(
-    FController.Entity.Produto.SetDescricao(
-      EditPesquisa.Text
-    )
-  ).ListarPor('DESCRICAO').DataSource(DataSourcePesquisa);
-
-  CopiarDados(DataSourcePesquisa.DataSet);
+  PreencherProdutos(FProdutos.PesquisarPorDescricao(EditPesquisa.Text));
   ConfigurarGridProduto;
 end;
 
@@ -300,40 +311,78 @@ begin
   GridPesquisa.Refresh;
 end;
 
-procedure TFPesquisa.CopiarDados(ADataSet: TDataSet);
+procedure TFPesquisa.PreencherClientes(const AClientes: TArray<ICliente>);
 var
-  i: Integer;
-  Field: TField;
+  lCliente: ICliente;
 begin
-  if ADataSet.IsEmpty then
-    Exit;
-
-  FDataSet.FieldDefs.Clear;
-
-  for i := 0 to ADataSet.FieldCount - 1 do
-      FDataSet.FieldDefs.Add(
-        ADataSet.Fields[i].FieldName,
-        ADataSet.Fields[i].DataType,
-        ADataSet.Fields[i].Size,
-        ADataSet.Fields[i].Required
-      );
+  FClientesLista := AClientes;
+  FProdutosLista := nil;
+  FPedidosLista := nil;
 
   FDataSet.Close;
+  FDataSet.FieldDefs.Clear;
+  FDataSet.FieldDefs.Add('CODIGO', ftInteger);
+  FDataSet.FieldDefs.Add('NOME', ftString, 100);
+  FDataSet.FieldDefs.Add('UF', ftString, 2);
+  FDataSet.FieldDefs.Add('CIDADE', ftString, 50);
   FDataSet.CreateDataSet;
-  FDataSet.Open;
 
-  ADataSet.First;
-  while not ADataSet.Eof do
+  for lCliente in AClientes do
   begin
     FDataSet.Append;
-    for i := 0 to ADataSet.FieldCount - 1 do
-    begin
-      Field := ADataSet.Fields[i];
-      FDataSet.FieldByName(Field.FieldName).Value := Field.Value;
-    end;
+    FDataSet.FieldByName('CODIGO').AsInteger := lCliente.GetCodigo;
+    FDataSet.FieldByName('NOME').AsString := lCliente.GetNome;
+    FDataSet.FieldByName('UF').AsString := lCliente.GetUF;
+    FDataSet.FieldByName('CIDADE').AsString := lCliente.GetCidade;
     FDataSet.Post;
+  end;
+end;
 
-    ADataSet.Next;
+procedure TFPesquisa.PreencherProdutos(const AProdutos: TArray<IProduto>);
+var
+  lProduto: IProduto;
+begin
+  FProdutosLista := AProdutos;
+  FClientesLista := nil;
+  FPedidosLista := nil;
+
+  FDataSet.Close;
+  FDataSet.FieldDefs.Clear;
+  FDataSet.FieldDefs.Add('CODIGO', ftInteger);
+  FDataSet.FieldDefs.Add('DESCRICAO', ftString, 100);
+  FDataSet.CreateDataSet;
+
+  for lProduto in AProdutos do
+  begin
+    FDataSet.Append;
+    FDataSet.FieldByName('CODIGO').AsInteger := lProduto.GetCodigo;
+    FDataSet.FieldByName('DESCRICAO').AsString := lProduto.GetDescricao;
+    FDataSet.Post;
+  end;
+end;
+
+procedure TFPesquisa.PreencherPedidos(const APedidos: TArray<IPedido>);
+var
+  lPedido: IPedido;
+begin
+  FPedidosLista := APedidos;
+  FClientesLista := nil;
+  FProdutosLista := nil;
+
+  FDataSet.Close;
+  FDataSet.FieldDefs.Clear;
+  FDataSet.FieldDefs.Add('NUMERO_PEDIDO', ftString, 20);
+  FDataSet.FieldDefs.Add('DATA_EMISSAO', ftDateTime);
+  FDataSet.FieldDefs.Add('REFERENCIA', ftString, 50);
+  FDataSet.CreateDataSet;
+
+  for lPedido in APedidos do
+  begin
+    FDataSet.Append;
+    FDataSet.FieldByName('NUMERO_PEDIDO').AsString := lPedido.GetNumeroPedido;
+    FDataSet.FieldByName('DATA_EMISSAO').AsDateTime := lPedido.GetDataEmissao;
+    FDataSet.FieldByName('REFERENCIA').AsString := lPedido.GetReferencia;
+    FDataSet.Post;
   end;
 end;
 

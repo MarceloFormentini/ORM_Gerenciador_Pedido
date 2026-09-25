@@ -4,7 +4,6 @@ interface
 
 uses
   model.conexao.uIQuery,
-  model.conexao.uIConnection,
   FireDAC.Comp.Client,
   Data.DB,
   System.Generics.Collections;
@@ -16,12 +15,13 @@ type
 
     procedure PreencheQuery(ASQL: String);
     procedure PreencheParams(AParams: Array of Variant);
+    function CopiarConsulta: TDataSet;
 
-    constructor Create(AConnection: IConnection);
+    constructor Create(AConnection: TFDConnection);
     destructor Destroy; override;
 
   public
-    class function New(AConnection: IConnection): IQuery;
+    class function New(AConnection: TFDConnection): IQuery;
 
     procedure Query(const Statement: String; const Params: Array of Variant); overload;
     function OneAll(const Statement: Variant; const Params: Array of Variant): TDataSet; overload;
@@ -31,10 +31,13 @@ type
 
 implementation
 
-constructor TQuery.Create(AConnection: IConnection);
+uses
+  FireDAC.Comp.DataSet;
+
+constructor TQuery.Create(AConnection: TFDConnection);
 begin
   FQuery := TFDQuery.Create(nil);
-  FQuery.Connection := TFDConnection(AConnection.Connection);
+  FQuery.Connection := AConnection;
 end;
 
 destructor TQuery.Destroy;
@@ -43,21 +46,41 @@ begin
   inherited;
 end;
 
-class function TQuery.New(AConnection: IConnection): IQuery;
+function TQuery.CopiarConsulta: TDataSet;
+var
+  lCopia: TFDMemTable;
+begin
+  FQuery.FetchAll;
+  lCopia := TFDMemTable.Create(nil);
+  try
+    lCopia.CopyDataSet(FQuery, [coStructure, coRestart, coAppend]);
+    if not lCopia.Active then
+      lCopia.Open;
+    Result := lCopia;
+    FQuery.Close;
+  except
+    lCopia.Free;
+    raise;
+  end;
+end;
+
+class function TQuery.New(AConnection: TFDConnection): IQuery;
 begin
   Result := Self.Create(AConnection);
 end;
 
 function TQuery.OneAll(const Statement: String; const Params: TDictionary<String, Variant>): TDataSet;
 begin
-  FQuery.SQL.Add(Statement);
+  FQuery.Close;
+  FQuery.SQL.Clear;
+  FQuery.SQL.Text := Statement;
 
   for var I in Params.Keys do
     if not (FQuery.Params.FindParam(I) = nil) then
       FQuery.ParamByName(I).Value := Params.Items[I];
 
-  FQuery.Open();
-  Result := FQuery;
+  FQuery.Open;
+  Result := CopiarConsulta;
 end;
 
 function TQuery.OneAll(const Statement: Variant; const Params: array of Variant): TDataSet;
@@ -66,7 +89,7 @@ begin
   PreencheParams(Params);
 
   FQuery.Open;
-  Result := FQuery;
+  Result := CopiarConsulta;
 end;
 
 procedure TQuery.PreencheParams(AParams: array of Variant);

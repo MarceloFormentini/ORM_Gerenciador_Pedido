@@ -4,25 +4,28 @@ interface
 
 uses
   model.pedido.uIPedido,
+  model.cliente.uCliente,
+  model.pedidoItens.uIItensPedido,
+  System.Generics.Collections,
   utils.uAtributos;
 
 type
   [Tabela('PEDIDO')]
   TPedido = class(TInterfacedObject, IPedido)
   private
-    [Campo('CODIGO'), PK]
+    [Campo('CODIGO'), PK, Identidade]
     FCodigo: Integer;
 
     [Campo('REFERENCIA')]
     FReferencia: String;
 
     [Campo('NUMERO_PEDIDO')]
-    FNumeroPedido: Integer;
+    FNumeroPedido: String;
 
     [Campo('DATA_EMISSAO')]
     FDataEmissao: TDateTime;
 
-    [Campo('CODIGO_CLIENTE'), FK]
+    [Campo('CODIGO_CLIENTE'), Relacionamento(TCliente)]
     FCodigoCliente: Integer;
 
     [Campo('TIPO_OPERACAO')]
@@ -31,12 +34,16 @@ type
     [Campo('TOTAL_PEDIDO')]
     FValorTotal: Currency;
 
+    FItens: TList<IItensPedido>;
+
   public
+    constructor Create;
+    destructor Destroy; override;
     class function New: IPedido;
 
     function GetCodigo: Integer;
     function GetReferencia: String;
-    function GetNumeroPedido: Integer;
+    function GetNumeroPedido: String;
     function GetDataEmissao: TDateTime;
     function GetCodigoCliente: Integer;
     function GetTipoPedido: String;
@@ -44,18 +51,84 @@ type
 
     function SetCodigo(const AValue: Integer): IPedido;
     function SetReferencia(const AValue: String): IPedido;
-    function SetNumeroPedido(const AValue: Integer): IPedido;
+    function SetNumeroPedido(const AValue: String): IPedido;
     function SetDataEmissao(AValue: TDateTime): IPedido;
     function SetCodigoCliente(const AValue: Integer): IPedido;
     function SetTipoPedido(const AValue: String): IPedido;
     function SetValorTotal(const AValue: Currency): IPedido;
+
+    function Itens: TList<IItensPedido>;
+    function AdicionarItem(AItem: IItensPedido): IPedido;
+    procedure ValidarCabecalho;
+    procedure Validar;
   end;
 
 implementation
 
+uses
+  System.SysUtils,
+  model.validacao.uValidacao;
+
+constructor TPedido.Create;
+begin
+  inherited;
+  FItens := TList<IItensPedido>.Create;
+end;
+
+destructor TPedido.Destroy;
+begin
+  FItens.Free;
+  inherited;
+end;
+
 class function TPedido.New: IPedido;
 begin
   Result := Self.Create;
+end;
+
+function TPedido.Itens: TList<IItensPedido>;
+begin
+  Result := FItens;
+end;
+
+function TPedido.AdicionarItem(AItem: IItensPedido): IPedido;
+begin
+  Result := Self;
+  FItens.Add(AItem);
+end;
+
+procedure TPedido.ValidarCabecalho;
+begin
+  FNumeroPedido := Trim(FNumeroPedido);
+  FReferencia := Trim(FReferencia);
+
+  if FNumeroPedido = '' then
+    raise EValidacao.Create('NUMERO_PEDIDO', 'O campo "Numero Pedido" é obrigatório.');
+  if FReferencia = '' then
+    raise EValidacao.Create('REFERENCIA', 'O campo "Referência" é obrigatório.');
+  if FDataEmissao = 0 then
+    raise EValidacao.Create('DATA_EMISSAO', 'O campo "Data Emissão" é obrigatório.');
+  if FCodigoCliente <= 0 then
+    raise EValidacao.Create('CODIGO_CLIENTE', 'O campo "Cliente" é obrigatório.');
+  if (FTipoPedido <> 'E') and (FTipoPedido <> 'S') then
+    raise EValidacao.Create('TIPO_OPERACAO', 'O tipo do pedido deve ser Entrada ou Saída.');
+end;
+
+procedure TPedido.Validar;
+var
+  lItem: IItensPedido;
+begin
+  ValidarCabecalho;
+
+  if FItens.Count = 0 then
+    raise EValidacao.Create('ITENS', 'Informe os itens do pedido para poder salvar.');
+
+  FValorTotal := 0;
+  for lItem in FItens do
+  begin
+    lItem.Validar;
+    FValorTotal := FValorTotal + lItem.GetValorTotal;
+  end;
 end;
 
 function TPedido.GetCodigo: Integer;
@@ -73,7 +146,7 @@ begin
   Result := FDataEmissao;
 end;
 
-function TPedido.GetNumeroPedido: Integer;
+function TPedido.GetNumeroPedido: String;
 begin
   Result := FNumeroPedido;
 end;
@@ -111,7 +184,7 @@ begin
   FDataEmissao := AValue;
 end;
 
-function TPedido.SetNumeroPedido(const AValue: Integer): IPedido;
+function TPedido.SetNumeroPedido(const AValue: String): IPedido;
 begin
   Result := Self;
   FNumeroPedido := AValue;

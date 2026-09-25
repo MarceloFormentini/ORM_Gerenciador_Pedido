@@ -161,12 +161,10 @@ object FProduto: TFProduto
       OnKeyPress = EditCodigoKeyPress
     end
     object EditDescricao: TEdit
-      Tag = 1
       Left = 103
       Top = 59
       Width = 352
       Height = 21
-      Hint = 'Descri'#231#227'o'
       CharCase = ecUpperCase
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -191,12 +189,10 @@ object FProduto: TFProduto
       OnClick = btnPesquisaClick
     end
     object EditValorUnit: TEdit
-      Tag = 1
       Left = 103
       Top = 84
       Width = 121
       Height = 21
-      Hint = 'Valor Unit'#225'rio'
       TabOrder = 2
       OnKeyPress = EditValorUnitKeyPress
     end

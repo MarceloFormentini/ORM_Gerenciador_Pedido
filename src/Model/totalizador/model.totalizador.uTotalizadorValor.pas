@@ -28,10 +28,12 @@ var
   bookmark: TBookmark;
 begin
   total := 0;
-  bookmark := FDataSet.GetBookmark;
-
+  bookmark := nil;
+  FDataSet.DisableControls;
   try
-    FDataSet.DisableControls;
+    if not FDataSet.IsEmpty then
+      bookmark := FDataSet.GetBookmark;
+
     FDataSet.First;
     while not FDataSet.Eof do
     begin
@@ -39,7 +41,8 @@ begin
       FDataSet.Next;
     end;
   finally
-    FDataSet.GotoBookmark(bookmark);
+    if (bookmark <> nil) and FDataSet.BookmarkValid(bookmark) then
+      FDataSet.GotoBookmark(bookmark);
     FDataSet.FreeBookmark(bookmark);
     FDataSet.EnableControls;
   end;

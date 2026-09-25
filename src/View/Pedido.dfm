@@ -100,12 +100,10 @@ object FPedido: TFPedido
           OnClick = btnPesquisaClick
         end
         object DataEmissao: TDateTimePicker
-          Tag = 1
           Left = 85
           Top = 160
           Width = 121
           Height = 21
-          Hint = 'Data Emiss'#227'o'
           Date = 45777.000000000000000000
           Time = 0.572418912037392100
           TabOrder = 3
@@ -116,56 +114,34 @@ object FPedido: TFPedido
           Width = 569
           Height = 97
           Caption = 'Tipo Opera'#231#227'o'
+          ItemIndex = 1
+          Items.Strings = (
+            'Entrada'
+            'Saida')
           TabOrder = 7
         end
-        object CheckEntrada: TCheckBox
-          Left = 109
-          Top = 248
-          Width = 97
-          Height = 17
-          Caption = 'Entrada'
-          TabOrder = 8
-          OnClick = CheckEntradaClick
-        end
-        object CheckSaida: TCheckBox
-          Left = 109
-          Top = 279
-          Width = 97
-          Height = 17
-          Caption = 'Saida'
-          TabOrder = 9
-          OnClick = CheckSaidaClick
-        end
         object EditNumeroPedido: TEdit
-          Tag = 1
           Left = 85
           Top = 51
           Width = 121
           Height = 21
-          Hint = 'Numero Pedido'
-          ParentShowHint = False
-          ShowHint = False
           TabOrder = 0
           OnKeyPress = EditNumeroPedidoKeyPress
         end
         object EditReferencia: TEdit
-          Tag = 1
           Left = 85
           Top = 128
           Width = 569
           Height = 21
-          Hint = 'Refer'#234'ncia'
           CharCase = ecUpperCase
           MaxLength = 100
           TabOrder = 2
         end
         object EditCodigoCliente: TEdit
-          Tag = 1
           Left = 85
           Top = 192
           Width = 121
           Height = 21
-          Hint = 'Cliente'
           TabOrder = 4
           OnKeyPress = EditCodigoClienteKeyPress
         end
@@ -682,6 +658,7 @@ object FPedido: TFPedido
     object ClientDataSetCODIGO_PRODUTO: TIntegerField
       DisplayLabel = 'Produto'
       FieldName = 'CODIGO_PRODUTO'
+      Required = True
     end
   end
 end

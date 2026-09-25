@@ -4,19 +4,20 @@ interface
 
 uses
   model.pedidoItens.uIItensPedido,
+  model.produto.uProduto,
   utils.uAtributos;
 
 type
   [Tabela('ITENS_PEDIDO')]
   TPedidoItens = class(TInterfacedObject, IItensPedido)
   private
-    [Campo('CODIGO'), PK]
+    [Campo('CODIGO'), PK, Identidade]
     FCodigo: Integer;
 
-    [Campo('CODIGO_PEDIDO'), FK]
+    [Campo('CODIGO_PEDIDO'), PK]
     FCodigoPedido: Integer;
 
-    [Campo('CODIGO_PRODUTO'), FK]
+    [Campo('CODIGO_PRODUTO'), Relacionamento(TProduto)]
     FCodigoProduto: Integer;
 
     [Campo('QUANTIDADE')]
@@ -46,9 +47,14 @@ type
     function SetValorUnitario(const AValue: Currency): IItensPedido;
     function SetValorTotal(const AValue: Currency): IItensPedido;
 
+    function RecalcularTotal: Currency;
+    procedure Validar;
   end;
 
 implementation
+
+uses
+  model.validacao.uValidacao;
 
 class function TPedidoItens.New: IItensPedido;
 begin
@@ -119,6 +125,24 @@ function TPedidoItens.SetValorUnitario(const AValue: Currency): IItensPedido;
 begin
   Result := Self;
   FValorUnitario := AValue;
+end;
+
+function TPedidoItens.RecalcularTotal: Currency;
+begin
+  FValorTotal := FQuantidade * FValorUnitario;
+  Result := FValorTotal;
+end;
+
+procedure TPedidoItens.Validar;
+begin
+  if FCodigoProduto <= 0 then
+    raise EValidacao.Create('CODIGO_PRODUTO', 'O campo Produto deve ser informado.');
+  if FQuantidade <= 0 then
+    raise EValidacao.Create('QUANTIDADE', 'A quantidade deve ser maior que zero.');
+  if FValorUnitario <= 0 then
+    raise EValidacao.Create('VALOR_UNITARIO', 'O valor unitário deve ser maior que zero.');
+
+  RecalcularTotal;
 end;
 
 end.

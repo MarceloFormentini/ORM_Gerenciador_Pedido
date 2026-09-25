@@ -18,6 +18,9 @@ type
     function SetQuantidade(const AValue: Currency): IItensPedido;
     function SetValorUnitario(const AValue: Currency): IItensPedido;
     function SetValorTotal(const AValue: Currency): IItensPedido;
+
+    function RecalcularTotal: Currency;
+    procedure Validar;
   end;
 
 implementation

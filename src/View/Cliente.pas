@@ -6,10 +6,10 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, System.ImageList, Vcl.ImgList,
   Vcl.StdCtrls, Vcl.ExtCtrls,
-  controller.uIController,
   Pesquisa, Vcl.Mask, Vcl.DBCtrls, Datasnap.DBClient, Data.DB,
   controller.cep.uIViaCepController, controller.cep.uViaCepController,
-  model.validacao.uIValidadorCampos;
+  controller.uIController, controller.cliente.uIClienteController, model.cliente.uICliente,
+  model.validacao.uValidacao;
 
 type
   TFCliente = class(TForm)
@@ -51,12 +51,13 @@ type
     procedure btnConsultarCEPClick(Sender: TObject);
   private
     FController: IController;
+    FClientes: IClienteController;
     FViaCEPController: IViaCepController;
-    FValidadorCampos: IValidadorCampos;
 
     procedure LimparCampos;
-    procedure CarregarCampos(ADataSet: TDataSet);
-
+    procedure CarregarCampos(ACliente: ICliente);
+    procedure MostrarValidacao(E: EValidacao);
+    function MontarCliente: ICliente;
   end;
 
 var
@@ -66,9 +67,44 @@ implementation
 
 uses
   controller.uController, model.cep.uViaCEP, model.cep.uIViaCEP,
-  model.validacao.uValidadorCampos, utils.uEnum;
+  utils.uEnum;
 
 {$R *.dfm}
+
+procedure TFCliente.MostrarValidacao(E: EValidacao);
+begin
+  ShowMessage(E.Message);
+  if E.Campo = 'NOME' then
+    EditNome.SetFocus
+  else if E.Campo = 'CEP' then
+    EditCEP.SetFocus
+  else if E.Campo = 'LOGRADOURO' then
+    EditLogradouro.SetFocus
+  else if E.Campo = 'BAIRRO' then
+    EditBairro.SetFocus
+  else if E.Campo = 'CIDADE' then
+    EditCidade.SetFocus
+  else if E.Campo = 'UF' then
+    EditUF.SetFocus
+  else if E.Campo = 'CODIGO_IBGE' then
+    EditCodigoIBGE.SetFocus;
+end;
+
+function TFCliente.MontarCliente: ICliente;
+begin
+  Result := FClientes.Novo
+    .SetNome(EditNome.Text)
+    .SetCEP(EditCEP.Text)
+    .SetLogradouro(EditLogradouro.Text)
+    .SetComplemento(EditComplemento.Text)
+    .SetBairro(EditBairro.Text)
+    .SetCidade(EditCidade.Text)
+    .SetUF(EditUF.Text)
+    .SetCodigoIBGE(EditCodigoIBGE.Text);
+
+  if EditCodigo.Text <> '' then
+    Result.SetCodigo(StrToInt(EditCodigo.Text));
+end;
 
 procedure TFCliente.btnConsultarCEPClick(Sender: TObject);
 var
@@ -78,7 +114,15 @@ begin
     Exit;
 
   FViaCEPController := TViaCepController.New;
-  ConsultaCEP := FViaCEPController.ConsultarPorCEP(EditCEP.Text);
+  try
+    ConsultaCEP := FViaCEPController.ConsultarPorCEP(EditCEP.Text);
+  except
+    on E: Exception do
+    begin
+      ShowMessage(E.Message);
+      Exit;
+    end;
+  end;
 
   EditLogradouro.Text := ConsultaCEP.GetLogradouro;
   EditComplemento.Text := ConsultaCEP.GetComplemento;
@@ -89,8 +133,6 @@ begin
 end;
 
 procedure TFCliente.btnExcluirClick(Sender: TObject);
-var
-  lDataSource: TDataSource;
 begin
   if EditCodigo.Text = '' then
     Exit;
@@ -98,35 +140,15 @@ begin
   if MessageDlg('Confirma a exclusão do cliente?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
   try
-    FController.Dao(
-      FController.Entity.Pedido.SetCodigoCliente(
-        StrToInt(EditCodigo.Text)
-      )
-    ).ListarPor('CODIGO_CLIENTE').DataSource(lDataSource);
-
-    if not lDataSource.DataSet.IsEmpty then
-    begin
-      ShowMessage('Cliente vínculado a um pedido não pode ser excluído.');
-      Exit;
-    end;
-
-  finally
-    lDataSource.Free;
-  end;
-
-  try
-    var lCliente := FController.Entity
-      .Cliente
-      .SetCodigo(StrToInt(EditCodigo.Text));
-
-    FController.Dao(lCliente).Excluir;
-
+    FClientes.Excluir(StrToInt(EditCodigo.Text));
     ShowMessage('Cliente excluído com sucesso.');
     Close;
   except
-    ShowMessage('Erro ao excluir o cliente.');
+    on E: EValidacao do
+      ShowMessage(E.Message);
+    on E: Exception do
+      ShowMessage('Erro ao excluir o cliente. ' + E.Message);
   end;
 end;
 
@@ -149,60 +171,51 @@ begin
   FPesquisa.TipoPesquisa := tpCliente;
   try
     if FPesquisa.ShowModal = mrOk then
-      CarregarCampos(FPesquisa.GetDataSet);
+      CarregarCampos(FPesquisa.ClienteSelecionado);
   finally
     FPesquisa.Free;
   end;
 end;
 
 procedure TFCliente.btnSalvarClick(Sender: TObject);
+var
+  lNovo: Boolean;
 begin
+  lNovo := EditCodigo.Text = '';
   try
-    if not FValidadorCampos.ValidarCampos then
-      Exit;
-
-    var lCliente := FController.Entity
-      .Cliente
-      .SetNome(EditNome.Text)
-      .SetCEP(EditCEP.Text)
-      .SetLogradouro(EditLogradouro.Text)
-      .SetComplemento(EditComplemento.Text)
-      .SetBairro(EditBairro.Text)
-      .SetCidade(EditCidade.Text)
-      .SetUF(EditUF.Text)
-      .SetCodigoIBGE(EditCodigoIBGE.Text);
-
-    if EditCodigo.Text = '' then
-    begin
-      FController.Dao(lCliente).Inserir;
-      ShowMessage('Cliente cadastrado com sucesso.');
-    end
+    FClientes.Salvar(MontarCliente);
+    if lNovo then
+      ShowMessage('Cliente cadastrado com sucesso.')
     else
-    begin
-      FController.Dao(lCliente).Atualizar;
       ShowMessage('Cliente atualizado com sucesso.');
-    end;
   except
-    ShowMessage('Erro ao salvar o cliente.');
+    on E: EValidacao do
+      MostrarValidacao(E);
+    on E: Exception do
+      ShowMessage('Erro ao salvar o cliente. ' + E.Message);
   end;
 end;
 
-procedure TFCliente.CarregarCampos(ADataSet: TDataSet);
+procedure TFCliente.CarregarCampos(ACliente: ICliente);
 begin
-  EditCodigo.Text       := ADataSet.FieldByName('CODIGO').AsString;
-  EditNome.Text         := ADataSet.FieldByName('NOME').AsString;
-  EditCEP.Text          := ADataSet.FieldByName('CEP').AsString;
-  EditLogradouro.Text   := ADataSet.FieldByName('LOGRADOURO').AsString;
-  EditComplemento.Text  := ADataSet.FieldByName('COMPLEMENTO').AsString;
-  EditBairro.Text       := ADataSet.FieldByName('BAIRRO').AsString;
-  EditCidade.Text       := ADataSet.FieldByName('CIDADE').AsString;
-  EditUF.Text           := ADataSet.FieldByName('UF').AsString;
-  EditCodigoIBGE.Text   := ADataSet.FieldByName('CODIGO_IBGE').AsString;
+  if not Assigned(ACliente) or (ACliente.GetCodigo <= 0) then
+  begin
+    LimparCampos;
+    Exit;
+  end;
+
+  EditCodigo.Text       := ACliente.GetCodigo.ToString;
+  EditNome.Text         := ACliente.GetNome;
+  EditCEP.Text          := ACliente.GetCEP;
+  EditLogradouro.Text   := ACliente.GetLogradouro;
+  EditComplemento.Text  := ACliente.GetComplemento;
+  EditBairro.Text       := ACliente.GetBairro;
+  EditCidade.Text       := ACliente.GetCidade;
+  EditUF.Text           := ACliente.GetUF;
+  EditCodigoIBGE.Text   := ACliente.GetCodigoIBGE;
 end;
 
 procedure TFCliente.EditCodigoKeyPress(Sender: TObject; var Key: Char);
-var
-  lDataSource: TDataSource;
 begin
   if key <> #13 then
     Exit;
@@ -210,25 +223,13 @@ begin
   if EditCodigo.Text = '' then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Cliente.SetCodigo(
-        StrToInt(EditCodigo.Text)
-      )
-    ).ListarPorId.DataSource(lDataSource);
-
-    CarregarCampos(lDataSource.DataSet);
-
-  finally
-    lDataSource.Free;
-  end;
+  CarregarCampos(FClientes.Buscar(StrToInt(EditCodigo.Text)));
 end;
 
 procedure TFCliente.FormCreate(Sender: TObject);
 begin
   FController := TController.New;
-  FValidadorCampos := TValidadorCampos.New(Self);
+  FClientes := FController.Clientes;
 end;
 
 procedure TFCliente.LimparCampos;

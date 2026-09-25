@@ -4,6 +4,7 @@ interface
 
 type
   IViaCEP = interface
+  ['{D0F614E7-805B-4C9D-AE43-5B1F70AD4C96}']
     function GetCep: string;
     function GetLogradouro: string;
     function GetComplemento: string;

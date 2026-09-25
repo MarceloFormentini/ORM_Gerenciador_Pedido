@@ -171,12 +171,10 @@ object FCliente: TFCliente
       OnKeyPress = EditCodigoKeyPress
     end
     object EditNome: TEdit
-      Tag = 1
       Left = 81
       Top = 53
       Width = 456
       Height = 21
-      Hint = 'Nome'
       CharCase = ecUpperCase
       Font.Charset = DEFAULT_CHARSET
       Font.Color = clWindowText
@@ -202,34 +200,28 @@ object FCliente: TFCliente
       OnClick = btnPesquisaClick
     end
     object EditUF: TEdit
-      Tag = 1
       Left = 80
       Top = 203
       Width = 121
       Height = 21
-      Hint = 'UF'
       CharCase = ecUpperCase
       MaxLength = 2
       TabOrder = 7
     end
     object EditCidade: TEdit
-      Tag = 1
       Left = 81
       Top = 178
       Width = 456
       Height = 21
-      Hint = 'Cidade'
       CharCase = ecUpperCase
       MaxLength = 50
       TabOrder = 6
     end
     object EditCEP: TEdit
-      Tag = 1
       Left = 81
       Top = 78
       Width = 121
       Height = 21
-      Hint = 'CEP'
       MaxLength = 8
       NumbersOnly = True
       TabOrder = 2
@@ -245,45 +237,37 @@ object FCliente: TFCliente
       OnClick = btnConsultarCEPClick
     end
     object EditLogradouro: TEdit
-      Tag = 1
       Left = 81
       Top = 103
       Width = 456
       Height = 21
-      Hint = 'Logradouro'
       CharCase = ecUpperCase
       MaxLength = 100
       TabOrder = 3
     end
     object EditComplemento: TEdit
-      Tag = 1
       Left = 81
       Top = 128
       Width = 456
       Height = 21
-      Hint = 'Complemento'
       CharCase = ecUpperCase
       MaxLength = 50
       TabOrder = 4
     end
     object EditBairro: TEdit
-      Tag = 1
       Left = 81
       Top = 153
       Width = 456
       Height = 21
-      Hint = 'Bairro'
       CharCase = ecUpperCase
       MaxLength = 50
       TabOrder = 5
     end
     object EditCodigoIBGE: TEdit
-      Tag = 1
       Left = 81
       Top = 227
       Width = 121
       Height = 21
-      Hint = 'IBGE'
       MaxLength = 10
       TabOrder = 8
     end

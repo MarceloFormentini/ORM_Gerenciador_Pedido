@@ -6,8 +6,8 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, System.ImageList, Vcl.ImgList,
   Vcl.StdCtrls, Vcl.ExtCtrls,
-  Data.DB, controller.uIController, Vcl.Mask,
-  model.validacao.uIValidadorCampos;
+  controller.uIController, controller.produto.uIProdutoController, Vcl.Mask,
+  model.produto.uIProduto, model.validacao.uValidacao;
 
 type
   TFProduto = class(TForm)
@@ -36,11 +36,12 @@ type
     procedure EditValorUnitKeyPress(Sender: TObject; var Key: Char);
   private
     FController: IController;
-    FValidadorCampos: IValidadorCampos;
+    FProdutos: IProdutoController;
 
     procedure LimparCampos;
-    procedure CarregarCampos(ADataSet: TDataSet);
-
+    procedure CarregarCampos(AProduto: IProduto);
+    procedure MostrarValidacao(E: EValidacao);
+    function MontarProduto: IProduto;
   end;
 
 var
@@ -49,10 +50,28 @@ var
 implementation
 
 uses
-  Pesquisa, controller.uController, model.validacao.uValidadorCampos,
-  utils.uEnum;
+  Pesquisa, controller.uController, utils.uEnum;
 
 {$R *.dfm}
+
+procedure TFProduto.MostrarValidacao(E: EValidacao);
+begin
+  ShowMessage(E.Message);
+  if E.Campo = 'DESCRICAO' then
+    EditDescricao.SetFocus
+  else if E.Campo = 'VALOR_UNITARIO' then
+    EditValorUnit.SetFocus;
+end;
+
+function TFProduto.MontarProduto: IProduto;
+begin
+  Result := FProdutos.Novo
+    .SetDescricao(EditDescricao.Text)
+    .SetPrecoVenda(StrToFloat(EditValorUnit.Text));
+
+  if EditCodigo.Text <> '' then
+    Result.SetCodigo(StrToInt(EditCodigo.Text));
+end;
 
 procedure TFProduto.btnNovoClick(Sender: TObject);
 begin
@@ -68,56 +87,48 @@ begin
   FPesquisa.TipoPesquisa := tpProduto;
   try
     if FPesquisa.ShowModal = mrOk then
-      CarregarCampos(FPesquisa.GetDataSet);
+      CarregarCampos(FPesquisa.ProdutoSelecionado);
   finally
     FPesquisa.Free;
   end;
 end;
 
 procedure TFProduto.btnSalvarClick(Sender: TObject);
+var
+  lNovo: Boolean;
 begin
+  lNovo := EditCodigo.Text = '';
   try
-    if not FValidadorCampos.ValidarCampos then
-      Exit;
-
-    var lProduto := FController.Entity
-      .Produto
-      .SetDescricao(EditDescricao.Text)
-      .SetPrecoVenda(StrToFloat(EditValorUnit.Text));
-
-    if EditCodigo.Text = '' then
-    begin
-      FController.Dao(lProduto).Inserir;
-      ShowMessage('Produto cadastrado com sucesso.');
-    end
+    FProdutos.Salvar(MontarProduto);
+    if lNovo then
+      ShowMessage('Produto cadastrado com sucesso.')
     else
-    begin
-      FController.Dao(lProduto).Atualizar;
       ShowMessage('Produto atualizado com sucesso.');
-    end;
     Close;
   except
+    on E: EValidacao do
+      MostrarValidacao(E);
+    on E: EConvertError do
+      MostrarValidacao(EValidacao.Create('VALOR_UNITARIO', 'O campo "Valor Unitário" é obrigatório.'));
     on E: Exception do
       ShowMessage('Erro ao salvar o produto. ' + E.Message);
   end;
 end;
 
-procedure TFProduto.CarregarCampos(ADataSet: TDataSet);
+procedure TFProduto.CarregarCampos(AProduto: IProduto);
 begin
-  if ADataSet.IsEmpty then
+  if not Assigned(AProduto) or (AProduto.GetCodigo <= 0) then
   begin
     LimparCampos;
     Exit;
   end;
 
-  EditCodigo.Text    := ADataSet.FieldByName('CODIGO').AsString;
-  EditDescricao.Text := ADataSet.FieldByName('DESCRICAO').AsString;
-  EditValorUnit.Text := Format('%.2f', [ADataSet.FieldByName('PRECO_VENDA').AsFloat])
+  EditCodigo.Text    := AProduto.GetCodigo.ToString;
+  EditDescricao.Text := AProduto.GetDescricao;
+  EditValorUnit.Text := Format('%.2f', [AProduto.GetPrecoVenda]);
 end;
 
 procedure TFProduto.EditCodigoKeyPress(Sender: TObject; var Key: Char);
-var
-  lDataSource: TDataSource;
 begin
   if key <> #13 then
     Exit;
@@ -125,24 +136,11 @@ begin
   if EditCodigo.Text = '' then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
-  try
-    FController.Dao(
-      FController.Entity.Produto.SetCodigo(
-        StrToInt(EditCodigo.Text)
-      )
-    ).ListarPorId.DataSource(lDataSource);
-
-    CarregarCampos(lDataSource.DataSet);
-
-  finally
-    lDataSource.Free;
-  end;
+  CarregarCampos(FProdutos.Buscar(StrToInt(EditCodigo.Text)));
 end;
 
 procedure TFProduto.EditValorUnitKeyPress(Sender: TObject; var Key: Char);
 begin
-  // validação para aceitar apenas numero e vírgula
   if not (key in ['0'..'9',',',#8]) then
     key :=#0;
 end;
@@ -150,7 +148,7 @@ end;
 procedure TFProduto.FormCreate(Sender: TObject);
 begin
   FController := TController.New;
-  FValidadorCampos := TValidadorCampos.New(Self);
+  FProdutos := FController.Produtos;
 end;
 
 procedure TFProduto.LimparCampos;
@@ -161,8 +159,6 @@ begin
 end;
 
 procedure TFProduto.btnExcluirClick(Sender: TObject);
-var
-  lDataSource: TDataSource;
 begin
   if EditCodigo.Text = '' then
     Exit;
@@ -170,33 +166,15 @@ begin
   if MessageDlg('Confirma a exclusão do produto?', mtConfirmation, [mbYes, mbNo], 0) = mrNo then
     Exit;
 
-  lDataSource := TDataSource.Create(nil);
   try
-    FController.Dao(
-      FController.Entity.PedidoItens.SetCodigoProduto(
-        StrToInt(EditCodigo.Text)
-      )
-    ).ListarPor('CODIGO_PRODUTO').DataSource(lDataSource);
-
-    if not lDataSource.DataSet.IsEmpty then
-    begin
-      ShowMessage('Produto vínculado a um pedido não pode ser excluído');
-      Exit;
-    end;
-
-  finally
-    lDataSource.Free;
-  end;
-
-  try
-    var lProduto := FController.Entity.Produto.SetCodigo(StrToInt(EditCodigo.Text));
-
-    FController.Dao(lProduto).Excluir;
-
+    FProdutos.Excluir(StrToInt(EditCodigo.Text));
     ShowMessage('Produto excluído com sucesso.');
     Close;
   except
-    ShowMessage('Erro ao excluir o produto.');
+    on E: EValidacao do
+      ShowMessage(E.Message);
+    on E: Exception do
+      ShowMessage('Erro ao excluir o produto. ' + E.Message);
   end;
 end;
 
