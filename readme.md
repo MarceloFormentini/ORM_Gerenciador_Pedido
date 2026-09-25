@@ -75,28 +75,28 @@ Exemplo no pedido: `CODIGO_CLIENTE` aponta para `TCliente`, e no item `CODIGO_PR
 
 ```
 ORM_Gerenciador_Pedido/
-??? CadastroPedido.dpr          programa principal
-??? CadastroPedido.dproj        projeto Delphi
-??? readme.md
-??? database/
-?   ??? init.sql                cria o banco do zero (apaga as tabelas existentes)
-?   ??? alter_estoque.sql       adiciona PRODUTO.ESTOQUE em base já existente
-?   ??? conf.ini                modelo de conexão (não colocar senha no repositório)
-??? src/
-    ??? View/                   Principal, Cliente, Produto, Pedido, Pesquisa
-    ??? Controller/             TController e controladores de cliente, produto, pedido e CEP
-    ??? Model/
-    ?   ??? cliente/            ICliente, TCliente
-    ?   ??? produto/            IProduto, TProduto
-    ?   ??? pedido/             IPedido, TPedido
-    ?   ??? pedidoItens/        IItensPedido, TPedidoItens
-    ?   ??? entity/             IEntity, TEntity
-    ?   ??? DAO/                IDao, TDao
-    ?   ??? conexao/            IConnection, FireDAC, IQuery, ISettings
-    ?   ??? CEP/                IViaCEP, TViaCEP
-    ?   ??? validacao/          EValidacao
-    ?   ??? totalizador/       soma TOTAL_ITEM do dataset de itens
-    ??? utils/                  atributos, montador de SQL, mapeador, RTTI e utilitários
+    CadastroPedido.dpr          programa principal
+    CadastroPedido.dproj        projeto Delphi
+    readme.md
+    database/
+       init.sql                cria o banco do zero (apaga as tabelas existentes)
+       alter_estoque.sql       adiciona PRODUTO.ESTOQUE em base já existente
+       conf.ini                modelo de conexão (não colocar senha no repositório)
+    src/
+        View/                   Principal, Cliente, Produto, Pedido, Pesquisa
+        Controller/             TController e controladores de cliente, produto, pedido e CEP
+        Model/
+           cliente/            ICliente, TCliente
+           produto/            IProduto, TProduto
+           pedido/             IPedido, TPedido
+           pedidoItens/        IItensPedido, TPedidoItens
+           entity/             IEntity, TEntity
+           DAO/                IDao, TDao
+           conexao/            IConnection, FireDAC, IQuery, ISettings
+           CEP/                IViaCEP, TViaCEP
+           validacao/          EValidacao
+           totalizador/       soma TOTAL_ITEM do dataset de itens
+        utils/                  atributos, montador de SQL, mapeador, RTTI e utilitários
 ```
 
 A tela principal (`TFPrincipal`) abre Cliente, Produto e Pedido em modo modal. O menu lateral pode ficar recolhido (só ícones, com dica) ou expandido (rótulos).
